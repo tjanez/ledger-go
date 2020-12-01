@@ -17,8 +17,11 @@
 package ledger_go
 
 import (
+	"bufio"
 	"encoding/binary"
 	"fmt"
+	"os"
+
 	"github.com/pkg/errors"
 )
 
@@ -170,9 +173,24 @@ func UnwrapResponseAPDU(channel uint16, pipe <-chan []byte, packetSize int) ([]b
 	var totalSize uint16
 	var done = false
 
+	w := bufio.NewWriter(os.Stdout)
+
+	fmt.Fprintf(w, "\n\nIn function UnwrapResponseAPDU():\n")
+	w.Flush()
+
 	for !done {
+		fmt.Fprintf(w, "Reading packet %d\n", sequenceIdx)
+		w.Flush()
 		// Read next packet from the channel
 		buffer := <-pipe
+
+
+		fmt.Fprintf(w, "Read %d bytes from buffer:\n", len(buffer))
+		for _, b := range buffer {
+			fmt.Fprintf(w, "%02x", b)
+		}
+		fmt.Fprintf(w, "\n")
+		w.Flush()
 
 		result, responseSize, err := DeserializePacket(channel, buffer, sequenceIdx)
 		if err != nil {

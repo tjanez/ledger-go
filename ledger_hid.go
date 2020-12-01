@@ -19,8 +19,10 @@
 package ledger_go
 
 import (
+	"bufio"
 	"errors"
 	"fmt"
+	"os"
 	"sync"
 
 	"github.com/zondax/hid"
@@ -92,8 +94,8 @@ func (admin *LedgerAdminHID) CountDevices() int {
 
 func newDevice(dev *hid.Device) *LedgerDeviceHID {
 	return &LedgerDeviceHID{
-		device: dev,
-		readCo: new(sync.Once),
+		device:      dev,
+		readCo:      new(sync.Once),
 		readChannel: make(chan []byte),
 	}
 }
@@ -124,8 +126,21 @@ func (admin *LedgerAdminHID) Connect(requiredIndex int) (LedgerDevice, error) {
 
 func (ledger *LedgerDeviceHID) write(buffer []byte) (int, error) {
 	totalBytes := len(buffer)
+
+	w := bufio.NewWriter(os.Stdout)
+
+	fmt.Fprintf(w, "\n\nIn function LedgerDeviceHID.write():\n")
+	fmt.Fprintf(w, "Total bytes: %d\n", totalBytes)
+	w.Flush()
+
+	fmt.Fprintf(w, "Writing bytes:\n")
+	w.Flush()
 	totalWrittenBytes := 0
 	for totalBytes > totalWrittenBytes {
+		for _, b := range buffer {
+			fmt.Fprintf(w, "%02x", b)
+		}
+		w.Flush()
 		writtenBytes, err := ledger.device.Write(buffer)
 
 		if err != nil {
@@ -134,6 +149,10 @@ func (ledger *LedgerDeviceHID) write(buffer []byte) (int, error) {
 		buffer = buffer[writtenBytes:]
 		totalWrittenBytes += writtenBytes
 	}
+	fmt.Fprintln(w)
+	fmt.Fprintf(w, "Total bytes written: %d\n", totalWrittenBytes)
+	fmt.Fprintln(w, "Returning from function LedgerDeviceHid.write()")
+	w.Flush()
 	return totalWrittenBytes, nil
 }
 
@@ -150,9 +169,16 @@ func (ledger *LedgerDeviceHID) initReadChannel() {
 func (ledger *LedgerDeviceHID) readThread() {
 	defer close(ledger.readChannel)
 
+	w := bufio.NewWriter(os.Stdout)
+
+	fmt.Fprintf(w, "\n\nIn function LedgerDeviceHID.readThread():\n")
+	w.Flush()
+
 	for {
 		buffer := make([]byte, PacketSize)
 		readBytes, err := ledger.device.Read(buffer)
+		fmt.Fprintf(w, "Read %d bytes from device:\n%02x\n", readBytes, buffer)
+		w.Flush()
 
 		if err != nil {
 			return
@@ -165,6 +191,16 @@ func (ledger *LedgerDeviceHID) readThread() {
 }
 
 func (ledger *LedgerDeviceHID) Exchange(command []byte) ([]byte, error) {
+	w := bufio.NewWriter(os.Stdout)
+
+	fmt.Fprintf(w, "\n\nIn function LedgerDeviceHID.Exchange():\n")
+	fmt.Fprintf(w, "Command:\n")
+	for _, b := range command {
+		fmt.Fprintf(w, "%02x", b)
+	}
+	fmt.Fprintf(w, "\n")
+	w.Flush()
+
 	if len(command) < 5 {
 		return nil, fmt.Errorf("APDU commands should not be smaller than 5")
 	}
@@ -177,6 +213,9 @@ func (ledger *LedgerDeviceHID) Exchange(command []byte) ([]byte, error) {
 	if err != nil {
 		return nil, err
 	}
+	fmt.Fprintf(w, "Serialized command:\n%02x\n", string(serializedCommand))
+	fmt.Fprintf(w, "Length of serialized Command: %d\n", len(serializedCommand))
+	w.Flush()
 
 	// Write all the packets
 	_, err = ledger.write(serializedCommand)
@@ -195,6 +234,8 @@ func (ledger *LedgerDeviceHID) Exchange(command []byte) ([]byte, error) {
 		return nil, fmt.Errorf("len(response) < 2")
 	}
 
+	fmt.Fprintf(w, "Returning from function LedgerDeviceHID.Exchange()\n")
+	w.Flush()
 	swOffset := len(response) - 2
 	sw := codec.Uint16(response[swOffset:])
 
